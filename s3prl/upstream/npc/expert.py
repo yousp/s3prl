@@ -45,9 +45,12 @@ class UpstreamExpert(UpstreamBase):
 
     def forward(self, wavs):
         features = [self.preprocessor(wav.unsqueeze(0)) for wav in wavs]
+        feature_lengths = [feature.size(0) for feature in features]
         features = pad_sequence(features, batch_first=True)
 
-        predicted_BxLxM, features = self.model(features, testing=not self.training)
+        predicted_BxLxM, features = self.model(
+            features, testing=not self.training, lengths=feature_lengths
+        )
 
         # This forward function only does the model forward
         # The return dict is then handled by UpstreamBase's hooks

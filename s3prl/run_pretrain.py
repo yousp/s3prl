@@ -36,6 +36,7 @@ def get_pretrain_args():
     # use a ckpt as the experiment initialization
     # if set, all the following args and config will be overwrited by the ckpt, except args.mode
     parser.add_argument('-e', '--past_exp', metavar='{CKPT_PATH,CKPT_DIR}', help='Resume training from a checkpoint')
+    parser.add_argument('--init_upstream_ckpt', metavar='CKPT_PATH', help='Initialize upstream model weights from a checkpoint without resuming optimizer/config')
     parser.add_argument('-o', '--override', help='Used to override args and config, this is at the highest priority')
 
     # configuration for the experiment, including runner and downstream

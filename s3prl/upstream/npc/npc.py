@@ -110,6 +110,11 @@ class NPC(nn.Module):
         activate="relu",
         disable_cross_layer=False,
         dim_bottleneck=None,
+        use_utterance_film=False,
+        utterance_film_stats="mean_std",
+        utterance_film_hidden_size=None,
+        utterance_film_target="all",
+        utterance_film_shuffle=False,
     ):
         super(NPC, self).__init__()
 
@@ -124,9 +129,34 @@ class NPC(nn.Module):
         self.disable_cross_layer = disable_cross_layer
         self.apply_vq = vq is not None
         self.apply_ae = dim_bottleneck is not None
+        self.use_utterance_film = use_utterance_film
+        self.utterance_film_stats = utterance_film_stats
+        self.utterance_film_target = utterance_film_target
+        self.utterance_film_shuffle = utterance_film_shuffle
         if self.apply_ae:
             assert not self.apply_vq
             self.dim_bottleneck = dim_bottleneck
+
+        if self.use_utterance_film:
+            assert utterance_film_stats in [
+                "mean",
+                "mean_std",
+            ], "utterance_film_stats must be 'mean' or 'mean_std'"
+            assert utterance_film_target in [
+                "all",
+                "final",
+            ], "utterance_film_target must be 'all' or 'final'"
+            film_stats_size = input_size
+            if utterance_film_stats == "mean_std":
+                film_stats_size *= 2
+            film_hidden_size = utterance_film_hidden_size or hidden_size
+            self.utterance_film = nn.Sequential(
+                nn.Linear(film_stats_size, film_hidden_size),
+                nn.ReLU(),
+                nn.Linear(film_hidden_size, n_blocks * hidden_size * 2),
+            )
+            nn.init.zeros_(self.utterance_film[-1].weight)
+            nn.init.zeros_(self.utterance_film[-1].bias)
 
         # Build blocks
         self.blocks, self.masked_convs = [], []
@@ -213,7 +243,46 @@ class NPC(nn.Module):
                 break
         return unmasked_feat
 
-    def forward(self, sp_seq, testing=False):
+    def _utterance_stats(self, sp_seq, lengths=None):
+        if lengths is None:
+            mean = sp_seq.mean(dim=1)
+            if self.utterance_film_stats == "mean":
+                return mean
+            std = sp_seq.std(dim=1, unbiased=False)
+            return torch.cat([mean, std], dim=-1)
+
+        lengths = torch.as_tensor(lengths, device=sp_seq.device)
+        lengths = lengths.clamp(min=1, max=sp_seq.size(1)).to(sp_seq.dtype)
+        mask = (
+            torch.arange(sp_seq.size(1), device=sp_seq.device).unsqueeze(0)
+            < lengths.unsqueeze(1)
+        ).unsqueeze(-1)
+        mask = mask.to(sp_seq.dtype)
+        mean = (sp_seq * mask).sum(dim=1) / lengths.unsqueeze(-1)
+        if self.utterance_film_stats == "mean":
+            return mean
+        var = ((sp_seq - mean.unsqueeze(1)).pow(2) * mask).sum(dim=1)
+        var = var / lengths.unsqueeze(-1)
+        std = var.clamp(min=0.0).sqrt()
+        return torch.cat([mean, std], dim=-1)
+
+    def _utterance_film_params(self, sp_seq, lengths=None):
+        stats = self._utterance_stats(sp_seq, lengths)
+        if self.utterance_film_shuffle and self.training and stats.size(0) > 1:
+            stats = stats[torch.randperm(stats.size(0), device=stats.device)]
+        params = self.utterance_film(stats)
+        params = params.view(sp_seq.size(0), self.n_blocks, 2, self.code_dim)
+        gamma, beta = params[:, :, 0], params[:, :, 1]
+        return gamma, beta
+
+    def _apply_utterance_film(self, feat, gamma, beta, block_id):
+        gamma = gamma[:, block_id].unsqueeze(1)
+        beta = beta[:, block_id].unsqueeze(1)
+        return (1.0 + gamma) * feat + beta
+
+    def forward(self, sp_seq, testing=False, lengths=None):
+        if self.use_utterance_film:
+            film_gamma, film_beta = self._utterance_film_params(sp_seq, lengths)
         # BxTxC -> BxCxT (reversed in Masked ConvBlock)
         unmasked_feat = sp_seq.permute(0, 2, 1)
         # Forward through each layer
@@ -223,9 +292,20 @@ class NPC(nn.Module):
                 # Last layer masked feature only
                 if i == (self.n_blocks - 1):
                     feat = self.masked_convs[i](unmasked_feat)
+                    if self.use_utterance_film:
+                        feat = self._apply_utterance_film(
+                            feat, film_gamma, film_beta, i
+                        )
             else:
                 # Masked feature aggregation
                 masked_feat = self.masked_convs[i](unmasked_feat)
+                if self.use_utterance_film and (
+                    self.utterance_film_target == "all"
+                    or i == (self.n_blocks - 1)
+                ):
+                    masked_feat = self._apply_utterance_film(
+                        masked_feat, film_gamma, film_beta, i
+                    )
                 if i == 0:
                     feat = masked_feat
                 else:

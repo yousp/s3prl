@@ -65,6 +65,10 @@ class Runner():
         if self.init_ckpt != {}:
             print('[Runner] - Loading upstream weights from the previous experiment')
             upstream.load_model(self.init_ckpt)
+        elif self.args.init_upstream_ckpt:
+            print(f'[Runner] - Initializing upstream weights from {self.args.init_upstream_ckpt}')
+            init_upstream_ckpt = torch.load(self.args.init_upstream_ckpt, map_location='cpu')
+            upstream.load_model(init_upstream_ckpt)
         if hasattr(upstream, 'loss_to_device'):
             print('[Runner] - Loss to device')
             upstream.loss_to_device()

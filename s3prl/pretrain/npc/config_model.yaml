@@ -12,6 +12,11 @@ model:
     batch_norm: True                             # Apply BatchNorm in ConvBlock
     activate: 'relu'                         # Activation function of ConvBlock
     disable_cross_layer: False      # Apply Masked ConvBlock at last layer only
+    use_utterance_film: False       # Enable utterance-level mean/std FiLM
+    utterance_film_stats: 'mean_std' # 'mean' or 'mean_std'
+    utterance_film_hidden_size: 512  # Hidden size of the FiLM parameter MLP
+    utterance_film_target: 'all'     # 'all' masked conv blocks or 'final' only
+    utterance_film_shuffle: False    # Shuffle utterance stats across batch for ablation
     vq:
       codebook_size: [64,64,64,64]    # Codebook size of each group in VQ-layer
       code_dim: [128,128,128,128] # Dim of each group summing up to hidden_size

@@ -44,6 +44,24 @@ class UpstreamPretrainExpert(ApcPretrainExpert):
         return preprocessor
 
     # Interface
+    def load_model(self, init_ckpt):
+        assert 'model' in init_ckpt
+        model = self.model.module if self.multi_gpu else self.model
+        missing_keys, unexpected_keys = model.load_state_dict(
+            init_ckpt['model'], strict=False
+        )
+        if missing_keys:
+            print(
+                '[UpstreamPretrainExpert] - Missing keys initialized randomly: '
+                + ', '.join(missing_keys)
+            )
+        if unexpected_keys:
+            print(
+                '[UpstreamPretrainExpert] - Unexpected keys ignored: '
+                + ', '.join(unexpected_keys)
+            )
+
+    # Interface
     def forward(self, data, records={}, global_step=0, log_step=1000, **kwargs):
         """
         Args:
@@ -63,7 +81,7 @@ class UpstreamPretrainExpert(ApcPretrainExpert):
         audio_feat = audio_feat.to(self.device)
         
         # NPC: input = target
-        pred_spec, _ = self.model(audio_feat)
+        pred_spec, _ = self.model(audio_feat, lengths=audio_len)
         loss = self.loss(pred_spec, audio_feat)
         # Compute loss on valid part only
         effective_loss = 0
