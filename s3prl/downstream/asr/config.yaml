@@ -1,10 +1,10 @@
 runner:
-  total_steps: 200000
+  total_steps: 20000
   gradient_clipping: 1
-  gradient_accumulate_steps: 1
+  gradient_accumulate_steps: 4
   log_step: 100
-  eval_step: 2000
-  save_step: 500
+  eval_step: 1000
+  save_step: 1000
   max_keep: 1
   eval_dataloaders:
     - dev-clean
@@ -43,12 +43,12 @@ downstream_expert:
     dev-other: ['dev-other']
     test-clean: ['test-clean']
     test-other: ['test-other']
-    num_workers: 12
-    train_batch_size: 32
-    batch_size: 32
+    num_workers: 4
+    train_batch_size: 8
+    batch_size: 8
     eval_batch_size: 1
-    libri_root: '/home/leo/d/datasets/LibriSpeech'
-    bucket_file: './data/librispeech/len_for_bucket'
+    libri_root: '/home/yousp08/datasets/LibriSpeech/LibriSpeech'
+    bucket_file: 'data/len_for_bucket'
     dict_path: "./downstream/asr/char.dict"
 
     zero_infinity: True
