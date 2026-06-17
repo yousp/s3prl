@@ -6,7 +6,7 @@ LIBRISPEECH_PATH="/home/yousp08/datasets/LibriSpeech/LibriSpeech"
 SPEECH_COMMANDS_PATH="/home/yousp08/datasets/speech_commands"
 
 # Model Checkpoints
-PRETRAINED_CKPT="result/pretrain/npc_film_ls100/states-50000.ckpt"
+PRETRAINED_CKPT="result/pretrain/npc_film_ls100/states-epochs-56.ckpt"
 BASELINE_CKPT="../npc_360hr.ckpt"
 
 # -------------------------------------------------------------
